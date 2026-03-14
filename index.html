@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>專業家系圖繪製系統</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        :root { --sidebar-width: 280px; --primary: #2c3e50; }
+        body { font-family: "Microsoft JhengHei", sans-serif; margin: 0; display: flex; height: 100vh; background: #f0f2f5; overflow: hidden; }
+        
+        /* 左側工具欄：圖形列表 */
+        .sidebar { width: var(--sidebar-width); background: white; border-right: 1px solid #ddd; display: flex; flex-direction: column; box-shadow: 2px 0 10px rgba(0,0,0,0.05); z-index: 10; overflow-y: auto; }
+        .sidebar-header { padding: 20px; background: var(--primary); color: white; font-weight: bold; text-align: center; font-size: 1.2rem; }
+        .section { padding: 15px; border-bottom: 1px solid #eee; }
+        .section-title { font-size: 14px; color: #666; margin-bottom: 12px; font-weight: bold; display: block; border-left: 4px solid #3498db; padding-left: 8px; }
+        
+        /* 圖形方塊樣式 */
+        .symbol-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .symbol-btn { border: 1px solid #eee; padding: 10px; border-radius: 8px; cursor: pointer; text-align: center; transition: 0.2s; background: #fff; }
+        .symbol-btn:hover { background: #eef7ff; border-color: #3498db; }
+        .symbol-icon { font-size: 20px; margin-bottom: 5px; color: #333; }
+        .symbol-label { font-size: 12px; color: #555; }
+
+        /* 畫布區域 */
+        .main-content { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+        #canvas-wrapper { background: white; box-shadow: 0 4px 20px rgba(0,0,0,0.1); border: 1px solid #ccc; line-height: 0; }
+        
+        .footer-tools { margin-top: 15px; display: flex; gap: 10px; }
+        button.download-btn { background: #28a745; color: white; border: none; padding: 10px 25px; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 16px; }
+        button.download-btn:hover { background: #218838; }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <div class="sidebar-header">🧬 家系圖符號面板</div>
+        
+        <div class="section">
+            <span class="section-title">1. 設定成員資訊</span>
+            <input type="text" id="nodeName" placeholder="姓名/歲數 (如:案男 40)" style="width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px;">
+        </div>
+
+        <div class="section">
+            <span class="section-title">2. 成員符號 (直接點擊)</span>
+            <div class="symbol-grid">
+                <div class="symbol-btn" onclick="addNode('male')"><div class="symbol-icon">□</div><div class="symbol-label">普通男性</div></div>
+                <div class="symbol-btn" onclick="addNode('female')"><div class="symbol-icon">○</div><div class="symbol-label">普通女性</div></div>
+                <div class="symbol-btn" onclick="addNode('pro_male')"><div class="symbol-icon"><b>▣</b></div><div class="symbol-label">案男</div></div>
+                <div class="symbol-btn" onclick="addNode('pro_female')"><div class="symbol-icon"><b>◉</b></div><div class="symbol-label">案女</div></div>
+                <div class="symbol-btn" onclick="addNode('dead_male')"><div class="symbol-icon">☒</div><div class="symbol-label">亡男</div></div>
+                <div class="symbol-btn" onclick="addNode('dead_female')"><div class="symbol-icon">ⓧ</div><div class="symbol-label">亡女</div></div>
+                <div class="symbol-btn" onclick="addNode('disability')"><div class="symbol-icon">▩</div><div class="symbol-label">身障/病</div></div>
+                <div class="symbol-btn" onclick="addNode('unknown')"><div class="symbol-icon">△</div><div class="symbol-label">不知性別</div></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <span class="section-title">3. 建立關係 (Shift多選兩個人)</span>
+            <div class="symbol-grid">
+                <button onclick="createLink('normal')">連結</button>
+                <button onclick="createLink('cohabit')">同居</button>
+                <button onclick="createLink('divorce')" style="color:red;">離婚</button>
+                <button onclick="createLink('conflict')" style="color:orange;">衝突</button>
+                <button onclick="createLink('close')" style="color:blue;">親密</button>
+                <button onclick="createLink('broken')">惡化</button>
+            </div>
+        </div>
+        
+        <div style="padding:15px; font-size:12px; color:#888;">
+            * 選中後按 <b>Delete</b> 可刪除<br>
+            * 拖動成員，連線會自動跟隨
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div id="canvas-wrapper">
+            <canvas id="mainCanvas" width="900" height="650"></canvas>
+        </div>
+        <div class="footer-tools">
+            <button class="download-btn" onclick="downloadJPG()">💾 下載家系圖 (JPG)</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = new fabric.Canvas('mainCanvas');
+
+        // 刪除邏輯
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                canvas.getActiveObjects().forEach(obj => {
+                    if (obj.lines) obj.lines.forEach(l => canvas.remove(l));
+                    canvas.remove(obj);
+                });
+                canvas.discardActiveObject().requestRenderAll();
+            }
+        });
+
+        // 新增符號
+        function addNode(type) {
+            const name = document.getElementById('nodeName').value || "未命名";
+            let shape;
+            const base = { originX: 'center', originY: 'center', fill: 'white', stroke: 'black', strokeWidth: 2 };
+
+            if (type.includes('male')) shape = new fabric.Rect({ ...base, width: 50, height: 50 });
+            else if (type.includes('female')) shape = new fabric.Circle({ ...base, radius: 25 });
+            else if (type === 'disability') shape = new fabric.Rect({ ...base, width: 50, height: 50, strokeDashArray: [5, 5], fill: '#f0f0f0' });
+            else shape = new fabric.Triangle({ ...base, width: 50, height: 50 });
+
+            if (type.startsWith('pro_')) shape.set('strokeWidth', 5);
+            
+            if (type.startsWith('dead_')) {
+                const x1 = new fabric.Line([-20, -20, 20, 20], { stroke: 'black', strokeWidth: 2 });
+                const x2 = new fabric.Line([20, -20, -20, 20], { stroke: 'black', strokeWidth: 2 });
+                shape = new fabric.Group([shape, x1, x2]);
+            }
+
+            const text = new fabric.Text(name, { fontSize: 14, top: 40, originX: 'center' });
+            const group = new fabric.Group([shape, text], { left: 200, top: 200 });
+            group.lines = [];
+            canvas.add(group);
+        }
+
+        // 建立連線
+        function createLink(style) {
+            const active = canvas.getActiveObjects();
+            if (active.length !== 2) return alert("請先按住 Shift 選取兩個人");
+            
+            const p1 = active[0], p2 = active[1];
+            const line = new fabric.Line([p1.left, p1.top, p2.left, p2.top], { stroke: 'black', strokeWidth: 2, selectable: true });
+
+            if (style === 'cohabit') line.set('strokeDashArray', [5, 5]);
+            if (style === 'divorce') line.set({ stroke: 'red', strokeWidth: 3 });
+            if (style === 'conflict') line.set({ stroke: 'orange', strokeDashArray: [2, 2] });
+            if (style === 'close') line.set({ stroke: '#3498db', strokeWidth: 6 });
+
+            line.nodeA = p1; line.nodeB = p2;
+            p1.lines.push(line); p2.lines.push(line);
+            canvas.add(line);
+            canvas.sendToBack(line);
+        }
+
+        canvas.on('object:moving', (e) => {
+            const p = e.target;
+            if (p.lines) {
+                p.lines.forEach(l => {
+                    l.set({ x1: l.nodeA.left, y1: l.nodeA.top, x2: l.nodeB.left, y2: l.node
