@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>專業家系圖 - 生活圈與自動對齊版</title>
+    <script src="https://unpkg.com/fabric@5.3.0/dist/fabric.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        :root { --sidebar-bg: #2c3e50; --main-bg: #f4f7f6; }
+        body { font-family: "Microsoft JhengHei", sans-serif; margin: 0; display: flex; height: 100vh; background: var(--main-bg); overflow: hidden; }
+        .sidebar { width: 300px; background: var(--sidebar-bg); color: white; padding: 15px; overflow-y: auto; }
+        .sidebar-header { text-align: center; font-weight: bold; border-bottom: 2px solid #34495e; padding-bottom: 10px; margin-bottom: 15px; }
+        .section-title { font-size: 14px; color: #3498db; font-weight: bold; margin: 15px 0 10px; display: block; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .btn { background: #34495e; border: 1px solid #455a64; color: white; padding: 10px; cursor: pointer; border-radius: 6px; font-size: 12px; }
+        .btn:hover { background: #1abc9c; }
+        input { width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 4px; border: none; box-sizing: border-box; }
+        .main-content { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+        #canvas-holder { background: white; border: 2px solid #bdc3c7; box-shadow: 0 10px 25px rgba(0,0,0,0.1); position: relative; }
+        .save-btn { background: #27ae60; color: white; padding: 12px 30px; border: none; border-radius: 30px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 20px; }
+        
+        #quick-menu { position: absolute; display: none; pointer-events: none; z-index: 100; }
+        .arrow-btn { 
+            position: absolute; width: 30px; height: 30px; background: #e74c3c; color: white; 
+            border-radius: 50%; display: flex; align-items: center; justify-content: center; 
+            cursor: pointer; pointer-events: auto; font-weight: bold; font-size: 18px; border: 2px solid white;
+        }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <div class="sidebar-header">🧬 專業家系圖系統</div>
+    <input type="text" id="nodeLabel" placeholder="姓名/歲數/備註">
+    
+    <span class="section-title">1. 成員與功能</span>
+    <div class="grid">
+        <button class="btn" onclick="addNode('male')">□ 男</button>
+        <button class="btn" onclick="addNode('female')">○ 女</button>
+        <button class="btn" onclick="addNode('pro_male')">▣ 案男</button>
+        <button class="btn" onclick="addNode('pro_female')">◉ 案女</button>
+        <button class="btn" onclick="addNode('dead_male')">☒ 亡男</button>
+        <button class="btn" onclick="addNode('dead_female')">ⓧ 亡女</button>
+        <button class="btn" onclick="addLifeCircle()" style="background:#8e44ad;">⬢ 生活圈</button>
+        <button class="btn" onclick="addNote()" style="background:#d35400;">📝 說明文字</button>
+    </div>
+
+    <span class="section-title">2. 關係線 (置中對齊)</span>
+    <div class="grid">
+        <button class="btn" onclick="manualLink('normal')">連結</button>
+        <button class="btn" onclick="manualLink('cohabit')">同居</button>
+        <button class="btn" onclick="manualLink('divorce')" style="color:#e74c3c">離婚</button>
+        <button class="btn" onclick="manualLink('conflict')" style="color:#f1c40f">衝突</button>
+    </div>
+
+    <div style="margin-top: 20px; font-size: 11px; color: #bdc3c7;">
+        <b>💡 生活圈教學：</b><br>
+        點擊六角形後，可拖動每個角來改變形狀以包圍家人。
+    </div>
+</div>
+
+<div class="main-content">
+    <div id="canvas-holder">
+        <canvas id="c" width="900" height="650"></canvas>
+        <div id="quick-menu">
+            <div class="arrow-btn" style="top: -40px; left: 50%; transform: translateX(-50%);" onclick="quickAdd('up')">↑</div>
+            <div class="arrow-btn" style="bottom: -40px; left: 50%; transform: translateX(-50%);" onclick="quickAdd('down')">↓</div>
+            <div class="arrow-btn" style="left: -40px; top: 50%; transform: translateY(-50%);" onclick="quickAdd('left')">←</div>
+            <div class="arrow-btn" style="right: -40px; top: 50%; transform: translateY(-50%);" onclick="quickAdd('right')">→</div>
+        </div>
+    </div>
+    <button class="save-btn" onclick="exportToJPG()">💾 下載家系圖 (JPG)</button>
+</div>
+
+<script>
+    let canvas = new fabric.Canvas('c', { preserveObjectStacking: true });
+    let selectedMember = null;
+
+    // --- 生活圈 (多點可拉扯六角形) ---
+    function addLifeCircle() {
+        const points = [
+            {x: 0, y: -80}, {x: 70, y: -40}, {x: 70, y: 40},
+            {x: 0, y: 80}, {x: -70, y: 40}, {x: -70, y: -40}
+        ];
+        const polygon = new fabric.Polygon(points, {
+            left: 300, top: 300, fill: 'rgba(142, 68, 173, 0.1)',
+            stroke: '#8e44ad', strokeWidth: 2, strokeDashArray: [5, 5],
+            objectCaching: false, transparentCorners: false
+        });
+        canvas.add(polygon);
+        canvas.setActiveObject(polygon);
+    }
+
+    // --- 說明文字框 ---
+    function addNote() {
+        const text = document.getElementById('nodeLabel').value || "請輸入備註";
+        const note = new fabric.IText(text, {
+            left: 400, top: 400, fontSize: 16, backgroundColor: '#fff9c4',
+            padding: 5, borderDashArray: [3, 3], stroke: '#f1c40f'
+        });
+        canvas.add(note);
+    }
+
+    // --- 成員生成與置中對齊 ---
+    function createNode(type, labelText, x, y) {
+        const style = { originX: 'center', originY: 'center', stroke: 'black', strokeWidth: 2 };
+        let shape;
+
+        if (type.includes('male')) shape = new fabric.Rect({ ...style, width: 50, height: 50, fill: '#e3f2fd' });
+        else shape = new fabric.Circle({ ...style, radius: 25, fill: '#fce4ec' });
+
+        let members = [shape];
+
+        // 案主雙框
+        if (type.startsWith('pro_')) {
+            shape.set('strokeWidth', 4);
+            let outer = type.includes('male') ? 
+                new fabric.Rect({ ...style, width: 65, height: 65, fill: 'transparent' }) :
+                new fabric.Circle({ ...style, radius: 33, fill: 'transparent' });
+            members.unshift(outer);
+        }
+
+        if (type.startsWith('dead_')) {
+            const l1 = new fabric.Line([-20, -20, 20, 20], { stroke: 'black', originX:'center', originY:'center' });
+            const l2 = new fabric.Line([20, -20, -20, 20], { stroke: 'black', originX:'center', originY:'center' });
+            members.push(l1, l2);
+        }
+
+        const text = new fabric.Text(labelText, { fontSize: 14, top: 45, originX: 'center' });
+        members.push(text);
+
+        const group = new fabric.Group(members, { left: x, top: y, originX: 'center', originY: 'center' });
+        group.attachedLines = [];
+        canvas.add(group);
+        return group;
+    }
+
+    // --- 自動連線與位置更新 (確保置中) ---
+    function createLineBetween(p1, p2, style) {
+        // 使用 getCenterPoint 確保線條從幾何中心點出發
+        const center1 = p1.getCenterPoint();
+        const center2 = p2.getCenterPoint();
+        const line = new fabric.Line([center1.x, center1.y, center2.x, center2.y], { 
+            stroke: 'black', strokeWidth: 2, selectable: true 
+        });
+
+        line.nodeA = p1; line.nodeB = p2;
+        p1.attachedLines.push(line); p2.attachedLines.push(line);
+        canvas.add(line);
+        canvas.sendToBack(line);
+    }
+
+    canvas.on('object:moving', (e) => {
+        const p = e.target;
+        if (p.attachedLines) {
+            p.attachedLines.forEach(l => {
+                const c1 = l.nodeA.getCenterPoint();
+                const c2 = l.nodeB.getCenterPoint();
+                l.set({ x1: c1.x, y1: c1.y, x2: c2.x, y2: c2.y });
+            });
+        }
+        updateMenuPos();
+    });
+
+    // --- 以下為 UI 輔助邏輯 ---
+    function addNode(type) { createNode(type, document.getElementById('nodeLabel').value || "成員", 200, 200); }
+    function manualLink(s) { const sel = canvas.getActiveObjects(); if (sel.length === 2) createLineBetween(sel[0], sel[1], s); }
+    function quickAdd(dir) {
+        if (!selectedMember) return;
+        let nX = selectedMember.left, nY = selectedMember.top;
+        if (dir === 'up') nY -= 120; if (dir === 'down') nY += 120;
+        if (dir === 'left') nX -= 120; if (dir === 'right') nX += 120;
+        const newNode = createNode('male', "新成員", nX, nY);
+        createLineBetween(selectedMember, newNode, 'normal');
+    }
+    canvas.on('selection:created', (e) => { if(e.target.type === 'group') { selectedMember = e.target; updateMenuPos(); document.getElementById('quick-menu').style.display='block'; }});
+    canvas.on('selection:cleared', () => { document.getElementById('quick-menu').style.display='none'; selectedMember=null; });
+    function updateMenuPos() { if(selectedMember) { const b = selectedMember.getBoundingRect(); const m = document.getElementById('quick-menu'); m.style.left=b.left+'px'; m.style.top=b.top+'px'; m.style.width=b.width+'px'; m.style.height=b.height+'px'; }}
+    function exportToJPG() { html2canvas(document.getElementById('canvas-holder')).then(c => { const a = document.createElement('a'); a.href = c.toDataURL('image/jpeg', 0.9); a.download = 'family_tree.jpg'; a.click(); }); }
+    document.addEventListener('keydown', (e) => { if (e.key === 'Delete') { canvas.getActiveObjects().forEach(o => { if(o.attachedLines) o.attachedLines.forEach(l => canvas.remove(l)); canvas.remove(o); }); canvas.discardActiveObject().renderAll(); }});
+</script>
+</body>
+</html>
