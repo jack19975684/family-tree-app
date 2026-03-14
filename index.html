@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>台灣家系圖繪製工具</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Noto Sans TC", "PingFang TC", Arial, sans-serif;
+      background: #f5f7fb;
+      color: #1f2937;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      background: #fff;
+      border-right: 1px solid #dbe3ef;
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    .main {
+      padding: 20px;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 24px;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 18px;
+    }
+
+    .desc {
+      color: #64748b;
+      font-size: 14px;
+      line-height: 1.8;
+      margin-bottom: 18px;
+    }
+
+    .card {
+      background: #fff;
+      border: 1px solid #dbe3ef;
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .btn-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .full {
+      grid-column: 1 / -1;
+    }
+
+    button {
+      border: none;
+      border-radius: 12px;
+      padding: 11px 14px;
+      cursor: pointer;
+      font-size: 14px;
+      background: #2563eb;
+      color: #fff;
+    }
+
+    button:hover {
+      opacity: 0.95;
+    }
+
+    button.secondary {
+      background: #eef4ff;
+      color: #1d4ed8;
+      border: 1px solid #cfe0ff;
+    }
+
+    button.danger {
+      background: #dc2626;
+    }
+
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      margin: 10px 0 6px;
+    }
+
+    input, select {
+      width: 100%;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+      background: #fff;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .tag {
+      background: #eef2ff;
+      color: #3730a3;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+    }
+
+    .canvas-wrap {
+      background: #fff;
+      border: 1px solid #dbe3ef;
+      border-radius: 20px;
+      overflow: hidden;
+    }
+
+    svg {
+      display: block;
+      width: 100%;
+      height: 760px;
+      background:
+        linear-gradient(#eef2f7 1px, transparent 1px),
+        linear-gradient(90deg, #eef2f7 1px, transparent 1px);
+      background-size: 24px 24px;
+      background-color: white;
+    }
+
+    .note {
+      margin-top: 14px;
+      font-size: 13px;
+      line-height: 1.8;
+      color: #64748b;
+    }
+
+    @media (max-width: 900px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { border-right: none; border-bottom: 1px solid #dbe3ef; }
+      svg { height: 620px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <h1>台灣家系圖工具</h1>
+      <div class="desc">
+        依常見家系圖畫法製作：男生方形、女生圓形、未知／其他菱形，
+        可加上案主雙框、死亡斜線，並建立婚姻／伴侶線與親子線。
+      </div>
+
+      <div class="card">
+        <h2>新增成員</h2>
+        <div class="btn-grid">
+          <button class="secondary" onclick="addNode('male')">新增男生</button>
+          <button class="secondary" onclick="addNode('female')">新增女生</button>
+          <button class="secondary full" onclick="addNode('unknown')">新增未知／其他</button>
+        </div>
+        <div class="legend">
+          <span class="tag">男生＝方形</span>
+          <span class="tag">女生＝圓形</span>
+          <span class="tag">未知＝菱形</span>
+          <span class="tag">案主＝雙框</span>
+          <span class="tag">死亡＝斜線</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>成員設定</h2>
+
+        <label for="nameInput">姓名</label>
+        <input id="nameInput" placeholder="請輸入姓名" oninput="updateSelectedField('name', this.value)" />
+
+        <label for="ageInput">年齡</label>
+        <input id="ageInput" placeholder="例如：22" oninput="updateSelectedField('age', this.value)" />
+
+        <label for="genderInput">性別／符號</label>
+        <select id="genderInput" onchange="updateSelectedField('gender', this.value)">
+          <option value="male">男生（方形）</option>
+          <option value="female">女生（圓形）</option>
+          <option value="unknown">未知／其他（菱形）</option>
+        </select>
+
+        <div class="btn-grid" style="margin-top: 10px;">
+          <button type="button" class="secondary" onclick="toggleFlag('identified')">切換案主雙框</button>
+          <button type="button" class="secondary" onclick="toggleFlag('deceased')">切換死亡斜線</button>
+        </div>
+
+        <div style="margin-top: 12px;">
+          <button class="danger" style="width:100%;" onclick="deleteSelected()">刪除成員</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>關係設定</h2>
+
+        <label for="relationType">關係類型</label>
+        <select id="relationType">
+          <option value="marriage">婚姻／伴侶</option>
+          <option value="parent">親子</option>
+        </select>
+
+        <label for="fromSelect">起點</label>
+        <select id="fromSelect"></select>
+
+        <label for="toSelect">終點</label>
+        <select id="toSelect"></select>
+
+        <div class="btn-grid" style="margin-top: 10px;">
+          <button onclick="addRelation()">新增關係線</button>
+          <button class="secondary" onclick="exportJSON()">匯出 JSON</button>
+        </div>
+      </div>
+
+      <div class="note">
+        使用方式：<br>
+        1. 點選人物可編輯資料。<br>
+        2. 拖曳人物可移動位置。<br>
+        3. 這版可直接放到 GitHub Pages。<br>
+        4. 之後還能再加離婚、分居、再婚、收養、雙胞胎、衝突關係線。
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="canvas-wrap">
+        <svg id="canvas" viewBox="0 0 1200 760"></svg>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    let nodes = [
+      { id: "n1", name: "祖父", gender: "male", x: 180, y: 100, age: "", deceased: false, identified: false },
+      { id: "n2", name: "祖母", gender: "female", x: 320, y: 100, age: "", deceased: false, identified: false },
+      { id: "n3", name: "父親", gender: "male", x: 220, y: 250, age: "", deceased: false, identified: false },
+      { id: "n4", name: "母親", gender: "female", x: 360, y: 250, age: "", deceased: false, identified: false },
+      { id: "n5", name: "案主", gender: "male", x: 290, y: 410, age: "22", deceased: false, identified: true }
+    ];
+
+    let relations = [
+      { id: "r1", type: "marriage", from: "n1", to: "n2" },
+      { id: "r2", type: "marriage", from: "n3", to: "n4" },
+      { id: "r3", type: "parent", from: "n1", to: "n3" },
+      { id: "r4", type: "parent", from: "n2", to: "n3" },
+      { id: "r5", type: "parent", from: "n3", to: "n5" },
+      { id: "r6", type: "parent", from: "n4", to: "n5" }
+    ];
+
+    let selectedId = "n5";
+    let dragInfo = null;
+    const svg = document.getElementById("canvas");
+
+    function getNode(id) {
+      return nodes.find(n => n.id === id);
+    }
+
+    function createSvgEl(tag, attrs = {}) {
+      const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+      Object.entries(attrs).forEach(([key, val]) => el.setAttribute(key, val));
+      return el;
+    }
+
+    function addNode(gender) {
+      const id = "n" + Date.now();
+      nodes.push({
+        id,
+        name: "新成員",
+        gender,
+        x: 620,
+        y: 120 + nodes.length * 18,
+        age: "",
+        deceased: false,
+        identified: false
+      });
+      selectedId = id;
+      refresh();
+    }
+
+    function deleteSelected() {
+      if (!selectedId) return;
+      nodes = nodes.filter(n => n.id !== selectedId);
+      relations = relations.filter(r => r.from !== selectedId && r.to !== selectedId);
+      selectedId = nodes.length ? nodes[nodes.length - 1].id : null;
+      refresh();
+    }
+
+    function updateSelectedField(field, value) {
+      const node = getNode(selectedId);
+      if (!node) return;
+      node[field] = value;
+      render();
+      updateForm();
+      updateRelationSelects();
+    }
+
+    function toggleFlag(field) {
+      const node = getNode(selectedId);
+      if (!node) return;
+      node[field] = !node[field];
+      render();
+      updateForm();
+    }
+
+    function addRelation() {
+      const type = document.getElementById("relationType").value;
+      const from = document.getElementById("fromSelect").value;
+      const to = document.getElementById("toSelect").value;
+
+      if (!from || !to || from === to) {
+        alert("請選擇兩位不同成員");
+        return;
+      }
+
+      relations.push({
+        id: "r" + Date.now(),
+        type,
+        from,
+        to
+      });
+
+      render();
+    }
+
+    function exportJSON() {
+      const data = JSON.stringify({ nodes, relations }, null, 2);
+      const blob = new Blob([data], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "genogram-data.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function updateForm() {
+      const node = getNode(selectedId);
+      document.getElementById("nameInput").value = node ? node.name : "";
+      document.getElementById("ageInput").value = node ? node.age : "";
+      document.getElementById("genderInput").value = node ? node.gender : "male";
+    }
+
+    function updateRelationSelects() {
+      const fromSelect = document.getElementById("fromSelect");
+      const toSelect = document.getElementById("toSelect");
+      fromSelect.innerHTML = "";
+      toSelect.innerHTML = "";
+
+      nodes.forEach(node => {
+        const option1 = document.createElement("option");
+        option1.value = node.id;
+        option1.textContent = node.name || node.id;
+        fromSelect.appendChild(option1);
+
+        const option2 = document.createElement("option");
+        option2.value = node.id;
+        option2.textContent = node.name || node.id;
+        toSelect.appendChild(option2);
+      });
+
+      if (nodes.length >= 2) {
+        fromSelect.value = nodes[0].id;
+        toSelect.value = nodes[1].id;
+      }
+    }
+
+    function renderRelations() {
+      relations.forEach(rel => {
+        const from = getNode(rel.from);
+        const to = getNode(rel.to);
+        if (!from || !to) return;
+
+        if (rel.type === "marriage") {
+          const line = createSvgEl("line", {
+            x1: from.x + 26,
+            y1: from.y,
+            x2: to.x - 26,
+            y2: to.y,
+            stroke: "black",
+            "stroke-width": 2.5
+          });
+          svg.appendChild(line);
+        }
+
+        if (rel.type === "parent") {
+          const midY = ((from.y + to.y) / 2) - 20;
+          const path = createSvgEl("path", {
+            d: `M ${from.x} ${from.y + 26} L ${from.x} ${midY} L ${to.x} ${midY} L ${to.x} ${to.y - 26}`,
+            fill: "none",
+            stroke: "black",
+            "stroke-width": 2.5
+          });
+          svg.appendChild(path);
+        }
+      });
+    }
+
+    function renderNode(node) {
+      const g = createSvgEl("g", {
+        transform: `translate(${node.x}, ${node.y})`,
+        style: "cursor:move;"
+      });
+
+      g.addEventListener("mousedown", (e) => startDrag(e, node.id));
+      g.addEventListener("click", (e) => {
+        e.stopPropagation();
+        selectedId = node.id;
+        refresh();
+      });
+
+      if (node.gender === "male") {
+        g.appendChild(createSvgEl("rect", {
+          x: -24, y: -24, width: 48, height: 48,
+          fill: "white", stroke: "black", "stroke-width": 2.5
+        }));
+      } else if (node.gender === "female") {
+        g.appendChild(createSvgEl("circle", {
+          cx: 0, cy: 0, r: 24,
+          fill: "white", stroke: "black", "stroke-width": 2.5
+        }));
+      } else {
+        g.appendChild(createSvgEl("path", {
+          d: "M 0 -24 L 24 0 L 0 24 L -24 0 Z",
+          fill: "white", stroke: "black", "stroke-width": 2.5
+        }));
+      }
+
+      if (node.identified) {
+        if (node.gender === "male") {
+          g.appendChild(createSvgEl("rect", {
+            x: -30, y: -30, width: 60, height: 60,
+            fill: "none", stroke: "black", "stroke-width": 2
+          }));
+        } else if (node.gender === "female") {
+          g.appendChild(createSvgEl("circle", {
+            cx: 0, cy: 0, r: 30,
+            fill: "none", stroke: "black", "stroke-width": 2
+          }));
+        } else {
+          g.appendChild(createSvgEl("path", {
+            d: "M 0 -30 L 30 0 L 0 30 L -30 0 Z",
+            fill: "none", stroke: "black", "stroke-width": 2
+          }));
+        }
+      }
+
+      if (node.deceased) {
+        g.appendChild(createSvgEl("line", {
+          x1: -28, y1: 28, x2: 28, y2: -28,
+          stroke: "black", "stroke-width": 2.5
+        }));
+      }
+
+      const nameText = createSvgEl("text", {
+        x: 0,
+        y: 46,
+        "text-anchor": "middle",
+        "font-size": 14,
+        "font-weight": selectedId === node.id ? 700 : 500
+      });
+      nameText.textContent = node.name || "未命名";
+      g.appendChild(nameText);
+
+      if (node.age) {
+        const ageText = createSvgEl("text", {
+          x: 0,
+          y: 64,
+          "text-anchor": "middle",
+          "font-size": 12
+        });
+        ageText.textContent = node.age + "歲";
+        g.appendChild(ageText);
+      }
+
+      if (selectedId === node.id) {
+        g.appendChild(createSvgEl("circle", {
+          cx: 0, cy: 0, r: 4, fill: "black"
+        }));
+      }
+
+      svg.appendChild(g);
+    }
+
+    function render() {
+      svg.innerHTML = "";
+      renderRelations();
+      nodes.forEach(renderNode);
+    }
+
+    function refresh() {
+      updateForm();
+      updateRelationSelects();
+      render();
+    }
+
+    function startDrag(e, nodeId) {
+      e.stopPropagation();
+      selectedId = nodeId;
+
+      const node = getNode(nodeId);
+      const pt = svg.createSVGPoint();
+      pt.x = e.clientX;
+      pt.y = e.clientY;
+      const cursor = pt.matrixTransform(svg.getScreenCTM().inverse());
+
+      dragInfo = {
+        nodeId,
+        dx: cursor.x - node.x,
+        dy: cursor.y - node.y
+      };
+
+      refresh();
+    }
+
+    window.addEventListener("mousemove", (e) => {
+      if (!dragInfo) return;
+
+      const pt = svg.createSVGPoint();
+      pt.x = e.clientX;
+      pt.y = e.clientY;
+      const cursor = pt.matrixTransform(svg.getScreenCTM().inverse());
+
+      const node = getNode(dragInfo.nodeId);
+      if (!node) return;
+
+      node.x = Math.max(50, cursor.x - dragInfo.dx);
+      node.y = Math.max(50, cursor.y - dragInfo.dy);
+
+      render();
+    });
+
+    window.addEventListener("mouseup", () => {
+      dragInfo = null;
+    });
+
+    svg.addEventListener("click", () => {
+      selectedId = null;
+      updateForm();
+      render();
+    });
+
+    refresh();
+  </script>
+</body>
+</html>
