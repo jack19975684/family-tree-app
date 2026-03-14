@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>家系圖繪製器</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        body { font-family: 'Microsoft JhengHei', sans-serif; background: #f8f9fa; margin: 0; padding: 20px; text-align: center; }
+        .controls { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; display: inline-block; }
+        #canvas-container { background: white; border: 2px solid #dee2e6; display: inline-block; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        button { padding: 10px 20px; cursor: pointer; border: none; border-radius: 5px; background: #007bff; color: white; font-weight: bold; margin: 5px; }
+        button:hover { background: #0056b3; }
+        .btn-download { background: #28a745; }
+        .tips { color: #666; font-size: 14px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <h2>🧬 我的家系圖繪製網站</h2>
+
+    <div class="controls">
+        <input type="text" id="nodeName" placeholder="成員姓名" style="padding: 8px;">
+        <select id="nodeGender" style="padding: 8px;">
+            <option value="male">男性 (方框)</option>
+            <option value="female">女性 (圓圈)</option>
+        </select>
+        <button onclick="addMember()">新增成員</button>
+        <button onclick="connectNodes()">連接選中的兩個成員</button>
+        <button class="btn-download" onclick="exportJPG()">下載 JPG</button>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="familyCanvas" width="900" height="600"></canvas>
+    </div>
+
+    <div class="tips">
+        提示：按住 <b>Shift</b> 並點擊兩個成員，再按「連接」即可畫出關係線。
+    </div>
+
+    <script>
+        const canvas = new fabric.Canvas('familyCanvas');
+
+        // 新增成員
+        function addMember() {
+            const name = document.getElementById('nodeName').value || "新成員";
+            const gender = document.getElementById('nodeGender').value;
+            
+            let shape;
+            if (gender === 'male') {
+                shape = new fabric.Rect({ width: 80, height: 60, fill: '#bbdefb', stroke: '#1976d2', strokeWidth: 2 });
+            } else {
+                shape = new fabric.Circle({ radius: 35, fill: '#f8bbd0', stroke: '#c2185b', strokeWidth: 2 });
+            }
+
+            const text = new fabric.Text(name, { fontSize: 16, originX: 'center', originY: 'center', left: shape.width/2 || 35, top: shape.height/2 || 35 });
+            const group = new fabric.Group([shape, text], { left: Math.random()*500, top: Math.random()*300 });
+            
+            canvas.add(group);
+        }
+
+        // 連接成員 (選取兩個物件後連線)
+        function connectNodes() {
+            const activeObjects = canvas.getActiveObjects();
+            if (activeObjects.length !== 2) {
+                alert("請先按住 Shift 選取兩個人！");
+                return;
+            }
+            const p1 = activeObjects[0].getCenterPoint();
+            const p2 = activeObjects[1].getCenterPoint();
+
+            const line = new fabric.Line([p1.x, p1.y, p2.x, p2.y], {
+                stroke: '#333',
+                strokeWidth: 2,
+                selectable: true
+            });
+            canvas.add(line);
+            canvas.sendToBack(line); // 線在人後面
+        }
+
+        // 下載 JPG
+        function exportJPG() {
+            const container = document.getElementById('canvas-container');
+            html2canvas(container).then(canvasElement => {
+                const link = document.createElement('a');
+                link.download = 'family-tree.jpg';
+                link.href = canvasElement.toDataURL('image/jpeg', 0.9);
+                link.click();
+            });
+        }
+    </script>
+</body>
+</html>
